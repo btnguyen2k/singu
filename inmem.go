@@ -23,14 +23,14 @@ func NewInmemQueue(name string, queueCapacity int, ephemeralDisabled bool, ephem
 
 // InmemQueue is in-memory queue implementation
 type InmemQueue struct {
-	name                             string
-	queueCapacity, ephemeralCapacity int
-	ephemeralDisabled                bool
+	name                             string // queue's name
+	queueCapacity, ephemeralCapacity int    // queue storage and ephemeral storage capacity
+	ephemeralDisabled                bool   // is ephemeral storage disabled?
 
-	queueStorage     *list.List
-	ephemeralStorage map[string]*QueueMessage
-	inited           bool
-	lock             sync.Mutex
+	queueStorage     *list.List               // queue storage implemented as a linked list
+	ephemeralStorage map[string]*QueueMessage // ephemeral storage implemented as a map
+	inited           bool                     // has this queue instance been initialized
+	lock             sync.Mutex               // lock to avoid race condition
 }
 
 // Init initializes the queue instance
@@ -85,18 +85,22 @@ func (q *InmemQueue) EphemeralStorageCapacity() (int, error) {
 	return q.ephemeralCapacity, nil
 }
 
-// EphemeralStorageCapacity implements IQueue.EphemeralStorageCapacity
+// IsEphemeralStorageEnabled implements IQueue.IsEphemeralStorageEnabled
 func (q *InmemQueue) IsEphemeralStorageEnabled() bool {
 	return !q.ephemeralDisabled
 }
 
-// Name implements IQueue.Queue
+// Queue implements IQueue.Queue
 func (q *InmemQueue) Queue(msg *QueueMessage) error {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 	if err := q.ensureInit(); err != nil {
 		return err
 	}
+	if q.queueCapacity > 0 && q.queueStorage.Len() >= q.queueCapacity {
+		return ErrorQueueIsFull
+	}
+
 	clone := CloneQueueMessage(*msg)
 	clone.QueueTimestamp = time.Now()
 	clone.TakenTimestamp = time.Time{}
@@ -105,6 +109,7 @@ func (q *InmemQueue) Queue(msg *QueueMessage) error {
 	return nil
 }
 
+// Requeue implements IQueue.Requeue
 func (q *InmemQueue) Requeue(id string, silent bool) error {
 	panic("implement me")
 }
@@ -169,6 +174,7 @@ func (q *InmemQueue) OrphanMessages(thresholdTimestampSeconds int64) ([]*QueueMe
 	return result, nil
 }
 
+// QueueSize implement IQueue.QueueSize
 func (q *InmemQueue) QueueSize() (int, error) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -178,6 +184,7 @@ func (q *InmemQueue) QueueSize() (int, error) {
 	return q.queueStorage.Len(), nil
 }
 
+// EphemeralSize implements IQueue.EphemeralSize
 func (q *InmemQueue) EphemeralSize() (int, error) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
