@@ -21,7 +21,8 @@ func NewInmemQueue(name string, queueCapacity int, ephemeralDisabled bool, ephem
 	return queue
 }
 
-// InmemQueue is in-memory queue implementation
+// InmemQueue is in-memory queue implementation.
+//	- If queue message's id is not set, this queue implementation will assign one. Otherwise, the pre-set message id is used.
 type InmemQueue struct {
 	name                             string // queue's name
 	queueCapacity, ephemeralCapacity int    // queue storage and ephemeral storage capacity
@@ -91,27 +92,49 @@ func (q *InmemQueue) IsEphemeralStorageEnabled() bool {
 }
 
 // Queue implements IQueue.Queue
-func (q *InmemQueue) Queue(msg *QueueMessage) error {
+func (q *InmemQueue) Queue(msg *QueueMessage) (*QueueMessage, error) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 	if err := q.ensureInit(); err != nil {
-		return err
+		return nil, err
 	}
 	if q.queueCapacity > 0 && q.queueStorage.Len() >= q.queueCapacity {
-		return ErrorQueueIsFull
+		return nil, ErrorQueueIsFull
 	}
 
 	clone := CloneQueueMessage(*msg)
+	if clone.Id == "" {
+		clone.Id = UniqueId()
+	}
 	clone.QueueTimestamp = time.Now()
 	clone.TakenTimestamp = time.Time{}
 	clone.NumRequeues = 0
 	q.queueStorage.PushBack(clone)
-	return nil
+	return &clone, nil
 }
 
 // Requeue implements IQueue.Requeue
-func (q *InmemQueue) Requeue(id string, silent bool) error {
-	panic("implement me")
+func (q *InmemQueue) Requeue(id string, silent bool) (*QueueMessage, error) {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+	if err := q.ensureInit(); err != nil {
+		return nil, err
+	}
+	if q.ephemeralDisabled {
+		return nil, ErrorOperationNotSupported
+	}
+	if msg, ok := q.ephemeralStorage[id]; ok {
+		msg.TakenTimestamp = time.Time{}
+		if !silent {
+			msg.QueueTimestamp = time.Now()
+			msg.NumRequeues++
+		}
+		q.queueStorage.PushBack(*msg)
+		delete(q.ephemeralStorage, id)
+		clone := CloneQueueMessage(*msg)
+		return &clone, nil
+	}
+	return nil, nil
 }
 
 // Finish implements IQueue.Finish
@@ -138,6 +161,14 @@ func (q *InmemQueue) Take() (*QueueMessage, error) {
 	if el := q.queueStorage.Front(); el != nil {
 		defer q.queueStorage.Remove(el)
 		switch el.Value.(type) {
+		case *QueueMessage:
+			msg1 := CloneQueueMessage(*el.Value.(*QueueMessage))
+			msg1.TakenTimestamp = time.Now()
+			if !q.ephemeralDisabled {
+				msg2 := CloneQueueMessage(msg1)
+				q.ephemeralStorage[msg2.Id] = &msg2
+			}
+			return &msg1, nil
 		case QueueMessage:
 			msg1 := CloneQueueMessage(el.Value.(QueueMessage))
 			msg1.TakenTimestamp = time.Now()
@@ -154,7 +185,7 @@ func (q *InmemQueue) Take() (*QueueMessage, error) {
 }
 
 // OrphanMessages implements IQueue.OrphanMessages
-func (q *InmemQueue) OrphanMessages(thresholdTimestampSeconds int64) ([]*QueueMessage, error) {
+func (q *InmemQueue) OrphanMessages(numSeconds int64) ([]*QueueMessage, error) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 	if err := q.ensureInit(); err != nil {
@@ -166,7 +197,7 @@ func (q *InmemQueue) OrphanMessages(thresholdTimestampSeconds int64) ([]*QueueMe
 	result := make([]*QueueMessage, 0)
 	now := time.Now()
 	for _, msg := range q.ephemeralStorage {
-		if msg.TakenTimestamp.Unix()+thresholdTimestampSeconds < now.Unix() {
+		if msg.TakenTimestamp.Unix()+numSeconds < now.Unix() {
 			clone := CloneQueueMessage(*msg)
 			result = append(result, &clone)
 		}

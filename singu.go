@@ -11,6 +11,11 @@ import (
 	"time"
 )
 
+const (
+	// Version of singu
+	Version = "0.1.0"
+)
+
 func getMacAddr() string {
 	interfaces, err := net.Interfaces()
 	if err == nil {
@@ -31,11 +36,16 @@ func getMacAddrAsLong() int64 {
 
 var idGen = olaf.NewOlaf(getMacAddrAsLong())
 
+// UniqueId returns a unique id as string
+func UniqueId() string {
+	return strings.ToLower(idGen.Id128Hex())
+}
+
 // NewQueueMessage creates a new QueueMessage instance with provided payload
 func NewQueueMessage(payload []byte) *QueueMessage {
 	now := time.Now()
 	return &QueueMessage{
-		Id:             strings.ToLower(idGen.Id128Hex()),
+		Id:             UniqueId(),
 		Timestamp:      now,
 		QueueTimestamp: now,
 		NumRequeues:    0,
@@ -54,9 +64,9 @@ func CloneQueueMessage(msg QueueMessage) QueueMessage {
 type QueueMessage struct {
 	Id             string    `json:"id"`           // message's unique id
 	Timestamp      time.Time `json:"time"`         // message's creation timestamp
-	QueueTimestamp time.Time `json:"qtime"`        // message's last-queued timestamp
-	TakenTimestamp time.Time `json:"ttime"`        // message's taken timestamp
-	NumRequeues    int       `json:"num_requeues"` // how many times message has been re-queued?
+	QueueTimestamp time.Time `json:"qtime"`        // message's last-queued timestamp, maintained by queue implementation
+	TakenTimestamp time.Time `json:"ttime"`        // message's taken timestamp, maintained by queue implementation
+	NumRequeues    int       `json:"num_requeues"` // how many times message has been re-queued?, maintained by queue implementations
 	Payload        []byte    `json:"payload"`      // message's payload
 }
 
@@ -91,41 +101,45 @@ const (
 //		- When done, call IQueue.finish(id)
 //		- If not done and the message needs to be re-queued, call IQueue.requeue(id, true/false) to put the message back to queue.
 type IQueue interface {
-	// Name returns queue's name
+	// Name returns queue's name.
 	Name() string
 
-	// QueueStorageCapacity returns max number of message queue storage can hold, or SizeNotSupported if queue storage has unlimited capacity
+	// QueueStorageCapacity returns max number of message queue storage can hold, or SizeNotSupported if queue storage has unlimited capacity.
 	QueueStorageCapacity() (int, error)
 
-	// EphemeralStorageCapacity returns max number of message ephemeral storage can hold, or SizeNotSupported if ephemeral storage has unlimited capacity
+	// EphemeralStorageCapacity returns max number of message ephemeral storage can hold, or SizeNotSupported if ephemeral storage has unlimited capacity.
 	EphemeralStorageCapacity() (int, error)
 
-	// IsEphemeralStorageEnabled returns true if ephemeral storage is supported, false otherwise
+	// IsEphemeralStorageEnabled returns true if ephemeral storage is supported, false otherwise.
 	IsEphemeralStorageEnabled() bool
 
-	// Queue puts a message to the tail of queue storage
-	Queue(msg *QueueMessage) error
+	// Queue enqueues a message: put the message to the tail of queue storage.
+	// This function returns the enqueued QueueMessage with Id and QueueTimestamp fields filled.
+	Queue(msg *QueueMessage) (*QueueMessage, error)
 
-	// Requeue re-puts a message from ephemeral storage back to queue storage
+	// Requeue moves the enqueued message from ephemeral back to queue storage.
 	// - id: id of the message to be re-queued
 	// - silent: if true, message's requeue count and queue timestamp will not be updated; if false, message's requeue count is increased and queue timestamp is updated
 	//
+	// This function returns the enqueued QueueMessage with Id and QueueTimestamp fields filled.
+	//
 	// Notes:
 	// - message is put to head or tail of queue storage depending on queue implementation
-	Requeue(id string, silent bool) error
+	Requeue(id string, silent bool) (*QueueMessage, error)
 
-	// Finish is called to signal that the  message can now be removed from ephemeral storage
+	// Finish is called to signal that the message can now be removed from ephemeral storage.
 	Finish(id string) error
 
-	// Takes removes a message from the head of queue storage, puts it to ephemeral storage and returns the message. Nil is returned if queue storage is empty
+	// Take dequeues a message: move a message from the head of queue storage to ephemeral storage and return the message.
+	// Nil is returned if queue storage is empty.
 	Take() (*QueueMessage, error)
 
-	// OrphanMessages returns all messages that have been staying in ephemeral storage for more than a specific number of seconds
-	OrphanMessages(thresholdTimestampSeconds int64) ([]*QueueMessage, error)
+	// OrphanMessages returns all messages that have been staying in ephemeral storage for more than a specific number of seconds.
+	OrphanMessages(numSeconds int64) ([]*QueueMessage, error)
 
-	// QueueSize returns number messages currently in queue storage
+	// QueueSize returns number messages currently in queue storage.
 	QueueSize() (int, error)
 
-	// EphemeralSize returns number messages currently in ephemeral storage
+	// EphemeralSize returns number messages currently in ephemeral storage.
 	EphemeralSize() (int, error)
 }

@@ -31,19 +31,22 @@ func NewLeveldbQueue(name, dataPath string, queueCapacity int, ephemeralDisabled
 const (
 	prefixQueue     = "queue-"
 	prefixEphemeral = "ephemeral-"
+	keyLastTakenId  = "last-taken-id"
 )
 
-// LeveldbQueue is LevelDB queue implementation
+// LeveldbQueue is LevelDB queue implementation.
+//	- This queue implementation does not use the pre-set message it. It always assigns assign new id for every enqueued message.
 type LeveldbQueue struct {
 	name                             string // queue's name
 	queueCapacity, ephemeralCapacity int    // queue storage and ephemeral storage capacity
 	ephemeralDisabled                bool   // is ephemeral storage disabled?
 	dataPath                         string // root directory to store LevelDB data, actual data is stored in <name> sub-directory
 
-	lastFetchedId string
-	db            *leveldb.DB // LevelDB instance
-	inited        bool        // has this queue instance been initialized
-	lock          sync.Mutex  // lock to avoid race condition
+	lastTakenId string
+	db          *leveldb.DB // LevelDB instance
+	inited      bool        // has this queue instance been initialized
+	lockInit    sync.Mutex  // lock to avoid race condition
+	lockTake    sync.Mutex  // lock to avoid race condition
 }
 
 // Init initializes the queue instance
@@ -61,6 +64,9 @@ func (q *LeveldbQueue) Init() error {
 		} else {
 			q.db = db
 		}
+		if lastTakenId, err := q.db.Get([]byte(keyLastTakenId), nil); err != nil {
+			q.lastTakenId = string(lastTakenId)
+		}
 		q.inited = true
 	}
 	return nil
@@ -68,6 +74,8 @@ func (q *LeveldbQueue) Init() error {
 
 func (q *LeveldbQueue) ensureInit() error {
 	if !q.inited {
+		q.lockInit.Lock()
+		defer q.lockInit.Unlock()
 		return q.Init()
 	}
 	return nil
@@ -76,6 +84,7 @@ func (q *LeveldbQueue) ensureInit() error {
 // Destroy cleans up the queue instance
 func (q *LeveldbQueue) Destroy() {
 	if q.db != nil {
+		// q.db.Put([]byte(keyLastTakenId), []byte(q.lastTakenId), nil)
 		q.db.Close()
 		q.db = nil
 	}
@@ -84,7 +93,7 @@ func (q *LeveldbQueue) Destroy() {
 
 // Name implements IQueue.Name
 func (q *LeveldbQueue) Name() string {
-	panic("implement me")
+	return q.name
 }
 
 // QueueStorageCapacity implements IQueue.QueueStorageCapacity
@@ -103,33 +112,61 @@ func (q *LeveldbQueue) IsEphemeralStorageEnabled() bool {
 }
 
 // Queue implements IQueue.Queue
-func (q *LeveldbQueue) Queue(msg *singu.QueueMessage) error {
-	q.lock.Lock()
-	defer q.lock.Unlock()
+func (q *LeveldbQueue) Queue(msg *singu.QueueMessage) (*singu.QueueMessage, error) {
 	if err := q.ensureInit(); err != nil {
-		return err
+		return nil, err
 	}
 	if q.queueCapacity > 0 {
 		if queueSize, err := q.countRangePrefix(prefixQueue); err != nil {
-			return err
+			return nil, err
 		} else if queueSize >= q.queueCapacity {
-			return singu.ErrorQueueIsFull
+			return nil, singu.ErrorQueueIsFull
 		}
 	}
-	key := prefixQueue + msg.Id
-	value, _ := json.Marshal(msg)
-	return q.db.Put([]byte(key), value, nil)
+
+	clone := singu.CloneQueueMessage(*msg)
+	clone.Id = singu.UniqueId()
+	clone.QueueTimestamp = time.Now()
+	clone.TakenTimestamp = time.Time{}
+	clone.NumRequeues = 0
+	value, _ := json.Marshal(clone)
+	return &clone, q.db.Put([]byte(prefixQueue+clone.Id), value, nil)
 }
 
 // Requeue implements IQueue.Requeue
-func (q *LeveldbQueue) Requeue(id string, silent bool) error {
-	panic("implement me")
+func (q *LeveldbQueue) Requeue(id string, silent bool) (*singu.QueueMessage, error) {
+	if err := q.ensureInit(); err != nil {
+		return nil, err
+	}
+	if q.ephemeralDisabled {
+		return nil, singu.ErrorOperationNotSupported
+	}
+	if value, err := q.db.Get([]byte(prefixEphemeral+id), nil); err != nil {
+		if err != leveldb.ErrNotFound {
+			return nil, err
+		}
+	} else {
+		batch := new(leveldb.Batch)
+		batch.Delete([]byte(prefixEphemeral + id))
+		var msg singu.QueueMessage
+		if err := json.Unmarshal(value, &msg); err != nil {
+			return nil, err
+		}
+		msg.Id = singu.UniqueId()
+		msg.TakenTimestamp = time.Time{}
+		if !silent {
+			msg.QueueTimestamp = time.Now()
+			msg.NumRequeues++
+		}
+		js, _ := json.Marshal(msg)
+		batch.Put([]byte(prefixQueue+msg.Id), js)
+		return &msg, q.db.Write(batch, nil)
+	}
+	return nil, nil
 }
 
 // Finish implements IQueue.Finish
 func (q *LeveldbQueue) Finish(id string) error {
-	q.lock.Lock()
-	defer q.lock.Unlock()
 	if err := q.ensureInit(); err != nil {
 		return err
 	}
@@ -138,8 +175,6 @@ func (q *LeveldbQueue) Finish(id string) error {
 
 // Take implements IQueue.Take
 func (q *LeveldbQueue) Take() (*singu.QueueMessage, error) {
-	q.lock.Lock()
-	defer q.lock.Unlock()
 	if err := q.ensureInit(); err != nil {
 		return nil, err
 	}
@@ -150,9 +185,11 @@ func (q *LeveldbQueue) Take() (*singu.QueueMessage, error) {
 			return nil, singu.ErrorEphemeralIsFull
 		}
 	}
+	q.lockTake.Lock()
+	defer q.lockTake.Unlock()
 	iter := q.db.NewIterator(util.BytesPrefix([]byte(prefixQueue)), nil)
 	defer iter.Release()
-	for ok := iter.Seek([]byte(q.lastFetchedId)); ok; {
+	if iter.Seek([]byte(q.lastTakenId)) {
 		key := iter.Key()
 		value := iter.Value()
 		var msg singu.QueueMessage
@@ -166,15 +203,19 @@ func (q *LeveldbQueue) Take() (*singu.QueueMessage, error) {
 			js, _ := json.Marshal(msg)
 			batch.Put([]byte(prefixEphemeral+msg.Id), js)
 		}
-		return &msg, q.db.Write(batch, nil)
+		batch.Put([]byte(keyLastTakenId), key)
+		if err := q.db.Write(batch, nil); err == nil {
+			q.lastTakenId = string(key)
+			return &msg, nil
+		} else {
+			return &msg, err
+		}
 	}
 	return nil, nil
 }
 
 // OrphanMessages implements IQueue.OrphanMessages
-func (q *LeveldbQueue) OrphanMessages(thresholdTimestampSeconds int64) ([]*singu.QueueMessage, error) {
-	q.lock.Lock()
-	defer q.lock.Unlock()
+func (q *LeveldbQueue) OrphanMessages(numSeconds int64) ([]*singu.QueueMessage, error) {
 	if err := q.ensureInit(); err != nil {
 		return nil, err
 	}
@@ -185,7 +226,7 @@ func (q *LeveldbQueue) OrphanMessages(thresholdTimestampSeconds int64) ([]*singu
 	for iter.Next() {
 		value := iter.Value()
 		var msg singu.QueueMessage
-		if err := json.Unmarshal(value, &msg); err == nil && msg.TakenTimestamp.Unix()+thresholdTimestampSeconds < now.Unix() {
+		if err := json.Unmarshal(value, &msg); err == nil && msg.TakenTimestamp.Unix()+numSeconds < now.Unix() {
 			result = append(result, &msg)
 		}
 	}
@@ -204,8 +245,6 @@ func (q *LeveldbQueue) countRangePrefix(prefix string) (int, error) {
 
 // QueueSize implements IQueue.QueueSize
 func (q *LeveldbQueue) QueueSize() (int, error) {
-	q.lock.Lock()
-	defer q.lock.Unlock()
 	if err := q.ensureInit(); err != nil {
 		return 0, err
 	}
@@ -214,8 +253,6 @@ func (q *LeveldbQueue) QueueSize() (int, error) {
 
 // EphemeralSize implements IQueue.EphemeralSize
 func (q *LeveldbQueue) EphemeralSize() (int, error) {
-	q.lock.Lock()
-	defer q.lock.Unlock()
 	if err := q.ensureInit(); err != nil {
 		return 0, err
 	}
