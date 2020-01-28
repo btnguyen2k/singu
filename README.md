@@ -7,6 +7,8 @@
 - Enqueue/Dequeue messages.
 - Retrieve list of orphan messages.
 
+Latest release [v0.1.1](RELEASE-NOTES.md).
+
 ## Queue Usage Flow
 
 - Create an `IQueue` instance. Pre-made implementations can be used out-of-the-box, see below.
@@ -35,7 +37,7 @@ application crashes in between `IQueue.Take()` and `IQueue.Finish(...)` (or `IQu
 If the application crashes in between `IQueue.Take()` and `IQueue.Finish(...)` (or `IQueue.Requeue(...)`),
 there could be orphan messages left in the _ephemeral storage_. To deal with orphan messages:
 
-- Call `IQueue.OrphanMessages(numSeconds int64) ([]*QueueMessage, error)` to retrieve all messages that have been staying in the _ephemeral storage_ for more than `numSeconds` seconds.
+- Call `IQueue.OrphanMessages(numSeconds, numMessages int) ([]*QueueMessage, error)` to retrieve all messages that have been staying in the _ephemeral storage_ for more than `numSeconds` seconds.
 - Call `IQueue.Finish(...)` on each message to completely remove the orphan message, or
 - Call `IQueue.Requeue(...)` to re-queue the message.
 

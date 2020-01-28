@@ -215,7 +215,7 @@ func (q *LeveldbQueue) Take() (*singu.QueueMessage, error) {
 }
 
 // OrphanMessages implements IQueue.OrphanMessages
-func (q *LeveldbQueue) OrphanMessages(numSeconds int64) ([]*singu.QueueMessage, error) {
+func (q *LeveldbQueue) OrphanMessages(numSeconds, numMessages int) ([]*singu.QueueMessage, error) {
 	if err := q.ensureInit(); err != nil {
 		return nil, err
 	}
@@ -223,11 +223,16 @@ func (q *LeveldbQueue) OrphanMessages(numSeconds int64) ([]*singu.QueueMessage, 
 	defer iter.Release()
 	result := make([]*singu.QueueMessage, 0)
 	now := time.Now()
+	counter := 0
 	for iter.Next() {
+		counter++
 		value := iter.Value()
 		var msg singu.QueueMessage
-		if err := json.Unmarshal(value, &msg); err == nil && msg.TakenTimestamp.Unix()+numSeconds < now.Unix() {
+		if err := json.Unmarshal(value, &msg); err == nil && msg.TakenTimestamp.Unix()+int64(numSeconds) < now.Unix() {
 			result = append(result, &msg)
+		}
+		if numMessages > 0 && counter >= numMessages {
+			break
 		}
 	}
 	return result, nil

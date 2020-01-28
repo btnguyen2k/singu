@@ -72,3 +72,8 @@ func TestInmemQueue_MultiThreads(t *testing.T) {
 	doTestInmemQueue_MultiThreads(t, "TestInmemQueue_MultiThreads_2P4C", 2, 4, 1000000)
 	doTestInmemQueue_MultiThreads(t, "TestInmemQueue_MultiThreads_4P8C", 4, 8, 1000000)
 }
+
+func TestInmemQueue_OrphanMessagesWithLimit(t *testing.T) {
+	queue := singu.NewInmemQueue(queueNameInmem, 0, false, 0)
+	MyTest_OrphanMessagesWithLimit("TestInmemQueue_OrphanMessagesWithLimit", queue, t)
+}

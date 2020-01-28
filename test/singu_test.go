@@ -33,7 +33,7 @@ func MyTest_Empty(test string, queue singu.IQueue, t *testing.T) {
 	} else if ephemeralSize != 0 && ephemeralSize != singu.SizeNotSupported {
 		t.Fatalf("%s failed: expected %d or %d but received %d", test, 0, singu.SizeNotSupported, ephemeralSize)
 	} else if ephemeralSize >= 0 {
-		if orphanMsgs, err := queue.OrphanMessages(10); err != nil {
+		if orphanMsgs, err := queue.OrphanMessages(10, 0); err != nil {
 			t.Fatalf("%s failed with error: %e", test, err)
 		} else if len(orphanMsgs) != 0 {
 			t.Fatalf("%s failed: expected %d orpham messages (in %d seconds) received %d ones", test, 0, 10, len(orphanMsgs))
@@ -62,7 +62,7 @@ func MyTest_QueueOne(test string, queue singu.IQueue, t *testing.T) {
 	} else if ephemeralSize != 0 && ephemeralSize != singu.SizeNotSupported {
 		t.Fatalf("%s failed: expected %d or %d but received %d", test, 0, singu.SizeNotSupported, ephemeralSize)
 	} else if ephemeralSize >= 0 {
-		if orphanMsgs, err := queue.OrphanMessages(10); err != nil {
+		if orphanMsgs, err := queue.OrphanMessages(10, 0); err != nil {
 			t.Fatalf("%s failed with error: %e", test, err)
 		} else if len(orphanMsgs) != 0 {
 			t.Fatalf("%s failed: expected %d orpham messages (in %d seconds) received %d ones", test, 0, 10, len(orphanMsgs))
@@ -97,7 +97,7 @@ func MyTest_QueueAndTakeOne(test string, queue singu.IQueue, t *testing.T) {
 	} else if ephemeralSize != 0 && ephemeralSize != singu.SizeNotSupported {
 		t.Fatalf("%s failed: expected %d or %d but received %d", test, 0, singu.SizeNotSupported, ephemeralSize)
 	} else if ephemeralSize >= 0 {
-		if orphanMsgs, err := queue.OrphanMessages(10); err != nil {
+		if orphanMsgs, err := queue.OrphanMessages(10, 0); err != nil {
 			t.Fatalf("%s failed with error: %e", test, err)
 		} else if len(orphanMsgs) != 0 {
 			t.Fatalf("%s failed: expected %d orpham messages (in %d seconds) received %d ones", test, 0, 10, len(orphanMsgs))
@@ -121,7 +121,7 @@ func MyTest_QueueAndTakeOne(test string, queue singu.IQueue, t *testing.T) {
 	} else if ephemeralSize != 1 && ephemeralSize != singu.SizeNotSupported {
 		t.Fatalf("%s failed: expected %d or %d but received %d", test, 1, singu.SizeNotSupported, ephemeralSize)
 	} else if ephemeralSize > 0 {
-		if orphanMsgs, err := queue.OrphanMessages(10); err != nil {
+		if orphanMsgs, err := queue.OrphanMessages(10, 0); err != nil {
 			t.Fatalf("%s failed with error: %e", test, err)
 		} else if len(orphanMsgs) != 0 {
 			t.Fatalf("%s failed: expected %d orpham messages (in %d seconds) received %d ones", test, 0, 10, len(orphanMsgs))
@@ -129,7 +129,7 @@ func MyTest_QueueAndTakeOne(test string, queue singu.IQueue, t *testing.T) {
 
 		time.Sleep(3 * time.Second)
 
-		if orphanMsgs, err := queue.OrphanMessages(2); err != nil {
+		if orphanMsgs, err := queue.OrphanMessages(2, 0); err != nil {
 			t.Fatalf("%s failed with error: %e", test, err)
 		} else if len(orphanMsgs) != 1 {
 			t.Fatalf("%s failed: expected %d orpham messages (in %d seconds) received %d ones", test, 1, 2, len(orphanMsgs))
@@ -171,7 +171,7 @@ func MyTest_QueueTakeAndFinishOne(test string, queue singu.IQueue, t *testing.T)
 	} else if ephemeralSize != 0 && ephemeralSize != singu.SizeNotSupported {
 		t.Fatalf("%s failed: expected %d or %d but received %d", test, 0, singu.SizeNotSupported, ephemeralSize)
 	} else if ephemeralSize >= 0 {
-		if orphanMsgs, err := queue.OrphanMessages(10); err != nil {
+		if orphanMsgs, err := queue.OrphanMessages(10, 0); err != nil {
 			t.Fatalf("%s failed with error: %e", test, err)
 		} else if len(orphanMsgs) != 0 {
 			t.Fatalf("%s failed: expected %d orpham messages (in %d seconds) received %d ones", test, 0, 10, len(orphanMsgs))
@@ -195,7 +195,7 @@ func MyTest_QueueTakeAndFinishOne(test string, queue singu.IQueue, t *testing.T)
 	} else if ephemeralSize != 1 && ephemeralSize != singu.SizeNotSupported {
 		t.Fatalf("%s failed: expected %d or %d but received %d", test, 1, singu.SizeNotSupported, ephemeralSize)
 	} else if ephemeralSize > 0 {
-		if orphanMsgs, err := queue.OrphanMessages(10); err != nil {
+		if orphanMsgs, err := queue.OrphanMessages(10, 0); err != nil {
 			t.Fatalf("%s failed with error: %e", test, err)
 		} else if len(orphanMsgs) != 0 {
 			t.Fatalf("%s failed: expected %d orpham messages (in %d seconds) received %d ones", test, 0, 10, len(orphanMsgs))
@@ -203,7 +203,7 @@ func MyTest_QueueTakeAndFinishOne(test string, queue singu.IQueue, t *testing.T)
 
 		time.Sleep(3 * time.Second)
 
-		if orphanMsgs, err := queue.OrphanMessages(2); err != nil {
+		if orphanMsgs, err := queue.OrphanMessages(2, 0); err != nil {
 			t.Fatalf("%s failed with error: %e", test, err)
 		} else if len(orphanMsgs) != 1 {
 			t.Fatalf("%s failed: expected %d orpham messages (in %d seconds) received %d ones", test, 1, 2, len(orphanMsgs))
@@ -225,7 +225,7 @@ func MyTest_QueueTakeAndFinishOne(test string, queue singu.IQueue, t *testing.T)
 		} else if ephemeralSize != 0 && ephemeralSize != singu.SizeNotSupported {
 			t.Fatalf("%s failed: expected %d or %d but received %d", test, 0, singu.SizeNotSupported, ephemeralSize)
 		}
-		if orphanMsgs, err := queue.OrphanMessages(10); err != nil {
+		if orphanMsgs, err := queue.OrphanMessages(10, 0); err != nil {
 			t.Fatalf("%s failed with error: %e", test, err)
 		} else if len(orphanMsgs) != 0 {
 			t.Fatalf("%s failed: expected %d orpham messages (in %d seconds) received %d ones", test, 0, 10, len(orphanMsgs))
@@ -774,5 +774,41 @@ func MyTest_MultiThreads(test string, queue singu.IQueue, numProducers, numConsu
 
 	if countMsgsConsumed != numMsgs {
 		t.Fatalf("%s failed: expected %d msgs consumed but actually %d", test, numMsgs, countMsgsConsumed)
+	}
+}
+
+// Queue and Take a N messages, then call OrphanMessages with numMessages=X (X < N). Expected:
+//	- ephemeral size = N
+//	- number of returned orphan messages = X
+func MyTest_OrphanMessagesWithLimit(test string, queue singu.IQueue, t *testing.T) {
+	numMsgsToQueue := 10
+	numOrphanMsgsToGet := 9
+
+	for i := 0; i < numMsgsToQueue; i++ {
+		msg := singu.NewQueueMessage([]byte("Queue Message " + strconv.Itoa(i)))
+		if _, err := queue.Queue(msg); err != nil {
+			t.Fatalf("%s failed with error: %e", test, err)
+		}
+	}
+	for i := 0; i < numMsgsToQueue; i++ {
+		if _, err := queue.Take(); err != nil {
+			t.Fatalf("%s failed with error: %e", test, err)
+		}
+	}
+
+	if ephemeralSize, err := queue.EphemeralSize(); err != nil {
+		t.Fatalf("%s failed with error: %e", test, err)
+	} else if ephemeralSize != numMsgsToQueue && ephemeralSize != singu.SizeNotSupported {
+		t.Fatalf("%s failed: expected %d or %d but received %d", test, numMsgsToQueue, singu.SizeNotSupported, ephemeralSize)
+	}
+
+	time.Sleep(3 * time.Second)
+
+	orphanMsgs, err := queue.OrphanMessages(2, numOrphanMsgsToGet)
+	if err != nil {
+		t.Fatalf("%s failed with error: %e", test, err)
+	}
+	if len(orphanMsgs) != numOrphanMsgsToGet {
+		t.Fatalf("%s failed: expected %d but received %d", test, numOrphanMsgsToGet, len(orphanMsgs))
 	}
 }

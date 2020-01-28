@@ -185,7 +185,7 @@ func (q *InmemQueue) Take() (*QueueMessage, error) {
 }
 
 // OrphanMessages implements IQueue.OrphanMessages
-func (q *InmemQueue) OrphanMessages(numSeconds int64) ([]*QueueMessage, error) {
+func (q *InmemQueue) OrphanMessages(numSeconds, numMessages int) ([]*QueueMessage, error) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 	if err := q.ensureInit(); err != nil {
@@ -196,10 +196,15 @@ func (q *InmemQueue) OrphanMessages(numSeconds int64) ([]*QueueMessage, error) {
 	}
 	result := make([]*QueueMessage, 0)
 	now := time.Now()
+	counter := 0
 	for _, msg := range q.ephemeralStorage {
-		if msg.TakenTimestamp.Unix()+numSeconds < now.Unix() {
+		if msg.TakenTimestamp.Unix()+int64(numSeconds) < now.Unix() {
+			counter++
 			clone := CloneQueueMessage(*msg)
 			result = append(result, &clone)
+			if numMessages > 0 && counter >= numMessages {
+				break
+			}
 		}
 	}
 	return result, nil

@@ -13,7 +13,7 @@ import (
 
 const (
 	// Version of singu
-	Version = "0.1.0"
+	Version = "0.1.1"
 )
 
 func getMacAddr() string {
@@ -118,13 +118,13 @@ type IQueue interface {
 	Queue(msg *QueueMessage) (*QueueMessage, error)
 
 	// Requeue moves the enqueued message from ephemeral back to queue storage.
-	// - id: id of the message to be re-queued
-	// - silent: if true, message's requeue count and queue timestamp will not be updated; if false, message's requeue count is increased and queue timestamp is updated
+	//	- id: id of the message to be re-queued
+	//	- silent: if true, message's requeue count and queue timestamp will not be updated; if false, message's requeue count is increased and queue timestamp is updated
 	//
 	// This function returns the enqueued QueueMessage with Id and QueueTimestamp fields filled.
 	//
 	// Notes:
-	// - message is put to head or tail of queue storage depending on queue implementation
+	//	- message is put to head or tail of queue storage depending on queue implementation
 	Requeue(id string, silent bool) (*QueueMessage, error)
 
 	// Finish is called to signal that the message can now be removed from ephemeral storage.
@@ -135,7 +135,11 @@ type IQueue interface {
 	Take() (*QueueMessage, error)
 
 	// OrphanMessages returns all messages that have been staying in ephemeral storage for more than a specific number of seconds.
-	OrphanMessages(numSeconds int64) ([]*QueueMessage, error)
+	//	- numSeconds: messages older than <numSeconds> will be returned
+	//	- numMessages: limit number of returned messages, value less than or equal to zero means 'no limit'
+	//
+	// Note: order of returned messages depends on queue implementation
+	OrphanMessages(numSeconds, numMessages int) ([]*QueueMessage, error)
 
 	// QueueSize returns number messages currently in queue storage.
 	QueueSize() (int, error)

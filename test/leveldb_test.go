@@ -93,3 +93,10 @@ func TestLeveldbQueue_MultiThreads(t *testing.T) {
 	doTestLeveldbQueue_MultiThreads(t, "TestLeveldbQueue_MultiThreads_2P4C", 2, 4, 100000)
 	doTestLeveldbQueue_MultiThreads(t, "TestLeveldbQueue_MultiThreads_4P8C", 4, 8, 100000)
 }
+
+func TestLeveldbQueue_OrphanMessagesWithLimit(t *testing.T) {
+	os.RemoveAll(dataPath + "/" + queueNameLeveldb)
+	queue := leveldb.NewLeveldbQueue(queueNameLeveldb, dataPath, 0, false, 0)
+	defer queue.(*leveldb.LeveldbQueue).Destroy()
+	MyTest_OrphanMessagesWithLimit("TestLeveldbQueue_OrphanMessagesWithLimit", queue, t)
+}
